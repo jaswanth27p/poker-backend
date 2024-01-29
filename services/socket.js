@@ -1,6 +1,5 @@
 const http = require("http");
 const socketIO = require("socket.io");
-const ChatMessage = require("../models/chatMessage");
 const Room = require("../models/room");
 const Poker = require("./poker");
 
@@ -97,7 +96,7 @@ function initializeSocket(app) {
           (user) =>
             !games[roomId].players.some((player) => player.id === user)
         );
-        const newPlayersNames = userList.filter(
+        const newPlayersNames = userNames.filter(
           (user) => !games[roomId].players.some((player) => player.name === user)
         );
 
@@ -136,7 +135,7 @@ function initializeSocket(app) {
         const newPlayers = userList.filter(
           (user) => !games[roomId].players.some((player) => player.id === user)
         );
-        const newPlayersNames = userList.filter(
+        const newPlayersNames = userNames.filter(
           (user) =>
             !games[roomId].players.some((player) => player.name === user)
         );
