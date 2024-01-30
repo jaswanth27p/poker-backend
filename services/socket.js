@@ -129,6 +129,7 @@ function initializeSocket(app) {
         });
         const room = await Room.findOne({ roomId: roomId });
         const userList = room.users;
+        const userNames = room.userNames;
         games[roomId].players = games[roomId].players.filter((player) =>
           userList.some((user) => user === player.id)
         );
