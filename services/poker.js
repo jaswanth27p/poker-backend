@@ -1,5 +1,19 @@
 const PokerSolver = require("pokersolver");
 class Poker {
+  static recreateInstance(serializedState) {
+    const poker = new Poker();
+    poker.players = serializedState.players;
+    poker.communityCards = serializedState.communityCards;
+    poker.deck = serializedState.deck;
+    poker.currentPlayerIndex = serializedState.currentPlayerIndex;
+    poker.pot = serializedState.pot;
+    poker.smallBlindIndex = serializedState.smallBlindIndex;
+    poker.bigBlindIndex = serializedState.bigBlindIndex;
+    poker.currentBettingRound = serializedState.currentBettingRound;
+    poker.winner = serializedState.winner;
+    return poker;
+  }
+
   constructor() {
     this.players = [];
     this.deck = [];
@@ -46,13 +60,13 @@ class Poker {
     }
   }
 
-  initializePlayers(users,userNames) {
+  initializePlayers(users, userNames) {
     for (let i = 0; i < users.length; i++) {
-      this.addPlayer(users[i],userNames[i]);
+      this.addPlayer(users[i], userNames[i]);
     }
   }
 
-  addPlayer(id ,name) {
+  addPlayer(id, name) {
     this.players.push({
       id,
       name,
@@ -64,8 +78,8 @@ class Poker {
     });
   }
 
-  startGame(user_list,userNames) {
-    this.initializePlayers(user_list ,userNames);
+  startGame(user_list, userNames) {
+    this.initializePlayers(user_list, userNames);
     this.players.forEach((player) => {
       player.inGame = true;
     });
@@ -142,10 +156,10 @@ class Poker {
             player.lastAction === "call" || player.lastAction === "raise"
         )
       ) {
-        let firstBet
+        let firstBet;
         if (activePlayers[0]) {
           firstBet = activePlayers[0].bet;
-        }else{
+        } else {
           firstBet = 0;
         }
 

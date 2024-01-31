@@ -2,8 +2,36 @@ const http = require("http");
 const socketIO = require("socket.io");
 const Room = require("../models/room");
 const Poker = require("./poker");
+const Game = require("../models/gameState");
 
 const games = {};
+
+async function getGameState(roomId) {
+ try {
+   const game = await Game.findOne({ roomId: roomId });
+   if (!game) {
+     throw new Error(`Game state not found for room ${roomId}`);
+   }
+   const pokerInstance = Poker.recreateInstance(game.gameState);
+   return pokerInstance;
+ } catch (error) {
+   console.error("Error fetching game state:", error);
+   return null;
+ }
+}
+
+async function saveGameState(roomId, gameState) {
+  try {
+    await Game.findOneAndUpdate(
+      { roomId: roomId },
+      { roomId: roomId, gameState: gameState },
+      { upsert: true }
+    );
+  } catch (error) {
+    console.error("Error saving game state:", error);
+  }
+}
+
 
 function initializeSocket(app) {
   const server = http.createServer(app);
@@ -24,9 +52,8 @@ function initializeSocket(app) {
           const userNames = room.userNames;
           io.to(roomId).emit("user_list", {userList,userNames});
         }
-
-        if (games[roomId]) {
-          const game = games[roomId];
+        let game = getGameState(roomId);
+        if (game) {
           io.to(roomId).emit("game_state", {
             players: game.players,
             communityCards: game.communityCards,
@@ -53,14 +80,14 @@ function initializeSocket(app) {
     socket.on("kick_out", async ({ userId, roomId }) => {
       const user = userId;
       io.to(roomId).emit("kicked_out", { user });
-      if (games[roomId]) {
-        const game = games[roomId];
+      let game = await getGameState(roomId);
+      if (game) {
         game.players = game.players.filter((player) => player.id !== userId);
 
         if (game.players.length < 2) {
           game.resetGame();
         }
-
+        saveGameState(roomId,game)
         io.to(roomId).emit("game_state", {
           players: game.players,
           communityCards: game.communityCards,
@@ -75,11 +102,12 @@ function initializeSocket(app) {
       const room = await Room.findOne({ roomId: roomId });
       const userList = room.users;
       const userNames = room.userNames;
-      if (!games[roomId]) {
-        games[roomId] = new Poker();
+      let game = await getGameState(roomId);
+      if (!game) {
+        game = new Poker();
         if (userList && userList.length > 1) {
-          games[roomId].startGame(userList,userNames);
-          const game = games[roomId];
+          game.startGame(userList,userNames);
+          saveGameState(roomId,game)
           io.to(roomId).emit("game_state", {
             players: game.players,
             communityCards: game.communityCards,
@@ -89,23 +117,23 @@ function initializeSocket(app) {
           });
         }
       } else {
-        games[roomId].players = games[roomId].players.filter((player) =>
+        game.players = game.players.filter((player) =>
           userList.some((user) => user === player.id)
         );
         const newPlayers = userList.filter(
           (user) =>
-            !games[roomId].players.some((player) => player.id === user)
+            !game.players.some((player) => player.id === user)
         );
         const newPlayersNames = userNames.filter(
-          (user) => !games[roomId].players.some((player) => player.name === user)
+          (user) => !game.players.some((player) => player.name === user)
         );
 
         for (i=0;i<newPlayers.length;i++){
-          games[roomId].addPlayer(newPlayers[i],newPlayersNames[i])
+          game.addPlayer(newPlayers[i],newPlayersNames[i])
         }
 
-        games[roomId].resetGame();
-        const game = games[roomId];
+        game.resetGame();
+        saveGameState(roomId,game)
         io.to(roomId).emit("game_state", {
           players: game.players,
           communityCards: game.communityCards,
@@ -117,36 +145,53 @@ function initializeSocket(app) {
     });
 
     socket.on("player_action", async ({ roomId, userId, action, callBet }) => {
+      let game = await getGameState(roomId);
+      console.log(game)
       if (
-        games[roomId].players[games[roomId].currentPlayerIndex].id == userId
+        game.players[game.currentPlayerIndex].id == userId
       ) {
-        games[roomId].handleActions(action, callBet);
+        game.handleActions(action, callBet);
       }
 
-      if (games[roomId].winner != "") {
+      if (game.winner != "") {
         io.to(roomId).emit("winner", {
-          winner: games[roomId].winner,
+          winner: game.winner,
         });
         const room = await Room.findOne({ roomId: roomId });
         const userList = room.users;
         const userNames = room.userNames;
-        games[roomId].players = games[roomId].players.filter((player) =>
+        game.players = game.players.filter((player) =>
           userList.some((user) => user === player.id)
         );
         const newPlayers = userList.filter(
-          (user) => !games[roomId].players.some((player) => player.id === user)
+          (user) => !game.players.some((player) => player.id === user)
         );
         const newPlayersNames = userNames.filter(
           (user) =>
-            !games[roomId].players.some((player) => player.name === user)
+            !game.players.some((player) => player.name === user)
         );
         for (i = 0; i < newPlayers.length; i++) {
-          games[roomId].addPlayer(newPlayers[i], newPlayersNames[i]);
+          game.addPlayer(newPlayers[i], newPlayersNames[i]);
         }
-        games[roomId].resetGame();
       }
-      const game = games[roomId];
+      saveGameState(roomId,game)
+      io.to(roomId).emit("game_state", {
+        players: game.players,
+        communityCards: game.communityCards,
+        currentPlayerIndex: game.currentPlayerIndex,
+        pot: game.pot,
+        smallBlindIndex: game.smallBlindIndex,
+      });
+    });
 
+    socket.on("reset_game", async ({ roomId })=>{
+      let game = await getGameState(roomId);
+      game.resetGame()
+      saveGameState(roomId,game)
+    });
+
+    socket.on("get_game_state", async ({ roomId }) => {
+      let game = await getGameState(roomId);
       io.to(roomId).emit("game_state", {
         players: game.players,
         communityCards: game.communityCards,
