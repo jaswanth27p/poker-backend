@@ -30,7 +30,6 @@ async function saveGameState(roomId, gameState) {
   }
 }
 
-
 function initializeSocket(app) {
   const server = http.createServer(app);
   const io = socketIO(server, {
@@ -52,7 +51,6 @@ function initializeSocket(app) {
         }
         let game = getGameState(roomId);
         if (game) {
-          startTimer(roomId)
           io.to(roomId).emit("game_state", {
             players: game.players,
             communityCards: game.communityCards,
@@ -209,9 +207,14 @@ function initializeSocket(app) {
         });
       }
     });
+
+    socket.on("timer", async ({ roomId, prevCount }) => {
+      io.to(roomId).emit("game_state", { prevCount });
+    });
+    
   });
 
   return io;
 }
 
-module.exports = { initializeSocket, games };
+module.exports = { initializeSocket };
