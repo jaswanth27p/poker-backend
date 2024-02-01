@@ -11,6 +11,7 @@ class Poker {
     poker.bigBlindIndex = serializedState.bigBlindIndex;
     poker.currentBettingRound = serializedState.currentBettingRound;
     poker.winner = serializedState.winner;
+    poker.timer = serializedState.timer
     return poker;
   }
 
@@ -24,6 +25,7 @@ class Poker {
     this.bigBlindIndex = 1;
     this.currentBettingRound = 0;
     this.winner = "";
+    this.timer=30;
     this.initializeDeck();
   }
 
@@ -191,6 +193,9 @@ class Poker {
     }
 
     this.currentPlayerIndex = this.smallBlindIndex;
+    if (!this.players[this.smallBlindIndex].inGame) {
+      this.nextPlayer()
+    }
   }
 
   nextPlayer() {
@@ -214,6 +219,7 @@ class Poker {
       const winner = activePlayers[0];
       console.log(`Game ended. ${winner.name} is the winner`);
       winner.chips += this.pot;
+      winner.handInfo=""
       this.winner = winner;
     } else {
       console.log(`Community cards: ${JSON.stringify(this.communityCards)}`);

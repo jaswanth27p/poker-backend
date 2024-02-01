@@ -4,20 +4,18 @@ const Room = require("../models/room");
 const Poker = require("./poker");
 const Game = require("../models/gameState");
 
-const games = {};
-
 async function getGameState(roomId) {
- try {
-   const game = await Game.findOne({ roomId: roomId });
-   if (!game) {
-     throw new Error(`Game state not found for room ${roomId}`);
-   }
-   const pokerInstance = Poker.recreateInstance(game.gameState);
-   return pokerInstance;
- } catch (error) {
-   console.error("Error fetching game state:", error);
-   return null;
- }
+  try {
+    const game = await Game.findOne({ roomId: roomId });
+    if (!game) {
+      throw new Error(`Game state not found for room ${roomId}`);
+    }
+    const pokerInstance = Poker.recreateInstance(game.gameState);
+    return pokerInstance;
+  } catch (error) {
+    console.error("Error fetching game state:", error);
+    return null;
+  }
 }
 
 async function saveGameState(roomId, gameState) {
@@ -50,10 +48,11 @@ function initializeSocket(app) {
         if (room) {
           const userList = room.users;
           const userNames = room.userNames;
-          io.to(roomId).emit("user_list", {userList,userNames});
+          io.to(roomId).emit("user_list", { userList, userNames });
         }
         let game = getGameState(roomId);
         if (game) {
+          startTimer(roomId)
           io.to(roomId).emit("game_state", {
             players: game.players,
             communityCards: game.communityCards,
@@ -63,7 +62,7 @@ function initializeSocket(app) {
           });
         }
       } catch (error) {
-        console.error("Error fetching chat history:", error);
+        console.error("Error fetching game:", error);
       }
     });
 
@@ -87,7 +86,7 @@ function initializeSocket(app) {
         if (game.players.length < 2) {
           game.resetGame();
         }
-        saveGameState(roomId,game)
+        saveGameState(roomId, game);
         io.to(roomId).emit("game_state", {
           players: game.players,
           communityCards: game.communityCards,
@@ -106,8 +105,8 @@ function initializeSocket(app) {
       if (!game) {
         game = new Poker();
         if (userList && userList.length > 1) {
-          game.startGame(userList,userNames);
-          saveGameState(roomId,game)
+          game.startGame(userList, userNames);
+          saveGameState(roomId, game);
           io.to(roomId).emit("game_state", {
             players: game.players,
             communityCards: game.communityCards,
@@ -121,19 +120,18 @@ function initializeSocket(app) {
           userList.some((user) => user === player.id)
         );
         const newPlayers = userList.filter(
-          (user) =>
-            !game.players.some((player) => player.id === user)
+          (user) => !game.players.some((player) => player.id === user)
         );
         const newPlayersNames = userNames.filter(
           (user) => !game.players.some((player) => player.name === user)
         );
 
-        for (i=0;i<newPlayers.length;i++){
-          game.addPlayer(newPlayers[i],newPlayersNames[i])
+        for (i = 0; i < newPlayers.length; i++) {
+          game.addPlayer(newPlayers[i], newPlayersNames[i]);
         }
 
         game.resetGame();
-        saveGameState(roomId,game)
+        saveGameState(roomId, game);
         io.to(roomId).emit("game_state", {
           players: game.players,
           communityCards: game.communityCards,
@@ -146,9 +144,9 @@ function initializeSocket(app) {
 
     socket.on("player_action", async ({ roomId, userId, action, callBet }) => {
       let game = await getGameState(roomId);
-      console.log(game)
       if (
-        game.players[game.currentPlayerIndex].id == userId
+        game.players[game.currentPlayerIndex].id == userId &&
+        game.winnerInfo != ""
       ) {
         game.handleActions(action, callBet);
       }
@@ -167,14 +165,15 @@ function initializeSocket(app) {
           (user) => !game.players.some((player) => player.id === user)
         );
         const newPlayersNames = userNames.filter(
-          (user) =>
-            !game.players.some((player) => player.name === user)
+          (user) => !game.players.some((player) => player.name === user)
         );
         for (i = 0; i < newPlayers.length; i++) {
           game.addPlayer(newPlayers[i], newPlayersNames[i]);
         }
+        game.winner = "";
       }
-      saveGameState(roomId,game)
+
+      saveGameState(roomId, game);
       io.to(roomId).emit("game_state", {
         players: game.players,
         communityCards: game.communityCards,
@@ -184,21 +183,31 @@ function initializeSocket(app) {
       });
     });
 
-    socket.on("reset_game", async ({ roomId })=>{
+    socket.on("reset_game", async ({ roomId }) => {
+      console.log("called");
       let game = await getGameState(roomId);
-      game.resetGame()
-      saveGameState(roomId,game)
+      game.resetGame();
+      saveGameState(roomId, game);
+      io.to(roomId).emit("game_state", {
+        players: game.players,
+        communityCards: game.communityCards,
+        currentPlayerIndex: game.currentPlayerIndex,
+        pot: game.pot,
+        smallBlindIndex: game.smallBlindIndex,
+      });
     });
 
     socket.on("get_game_state", async ({ roomId }) => {
       let game = await getGameState(roomId);
-      io.to(roomId).emit("game_state", {
-        players: game.players,
-        communityCards: game.communityCards,
-        currentPlayerIndex: game.currentPlayerIndex,
-        pot: game.pot,
-        smallBlindIndex: game.smallBlindIndex,
-      });
+      if (game) {
+        io.to(roomId).emit("game_state", {
+          players: game.players,
+          communityCards: game.communityCards,
+          currentPlayerIndex: game.currentPlayerIndex,
+          pot: game.pot,
+          smallBlindIndex: game.smallBlindIndex,
+        });
+      }
     });
   });
 
